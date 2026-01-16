@@ -1,6 +1,6 @@
-# nodeunit-http-https-client
+# nodeunit-api-client
 
-[![npm version](https://img.shields.io/npm/v/nodeunit-http-https-client.svg)](https://www.npmjs.com/package/nodeunit-http-https-client)
+[![npm version](https://img.shields.io/npm/v/nodeunit-api-client.svg)](https://www.npmjs.com/package/nodeunit-api-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Lightweight HTTP/HTTPS client with built-in testing assertions for Nodeunit.
@@ -19,7 +19,7 @@ Lightweight HTTP/HTTPS client with built-in testing assertions for Nodeunit.
 ## 📦 Installation
 
 ```bash
-npm install nodeunit-http-https-client
+npm install nodeunit-api-client
 ```
 
 ## 🚀 Quick Start
@@ -27,7 +27,7 @@ npm install nodeunit-http-https-client
 ### Basic Usage
 
 ```javascript
-const HttpClient = require('nodeunit-http-https-client');
+const HttpClient = require('nodeunit-api-client');
 
 const api = new HttpClient({
   protocol: 'https',
@@ -46,7 +46,7 @@ api.get(null, '/users', function(response) {
 ### With Nodeunit Tests
 
 ```javascript
-const HttpClient = require('nodeunit-http-https-client');
+const HttpClient = require('nodeunit-api-client');
 
 const api = new HttpClient({
   protocol: 'https',
@@ -226,7 +226,7 @@ api.get(null, '/endpoint', function(response) {
 ### Complete Test Example
 
 ```javascript
-const HttpClient = require('nodeunit-http-https-client');
+const HttpClient = require('nodeunit-api-client');
 
 const api = new HttpClient({
   protocol: 'https',
