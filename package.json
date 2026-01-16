@@ -1,13 +1,45 @@
 {
-  "author": "Charles Davison <charlie@powmedia.co.uk>",
-  "name": "nodeunit-httpclient",
-  "description": "HTTP response testing for NodeUnit",
-  "version": "0.2.1",
-  "repository": {},
-  "engines": {
-      "node": ">= 0.4.1"
+  "name": "nodeunit-http-https-client",
+  "version": "1.0.0",
+  "description": "Lightweight HTTP/HTTPS client with built-in testing assertions for Nodeunit",
+  "main": "src/httpclient.js",
+  "exports": {
+    ".": "./src/httpclient.js"
   },
-  "dependencies": {
-    "underscore": "1.1.7"
+  "keywords": [
+    "http",
+    "https",
+    "client",
+    "testing",
+    "nodeunit",
+    "test",
+    "assertions",
+    "api",
+    "rest"
+  ],
+  "author": "Sabri <ssabri1996@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssabri1996/nodeunit-httpclient.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ssabri1996/nodeunit-httpclient/issues"
+  },
+  "homepage": "https://github.com/ssabri1996/nodeunit-httpclient#readme",
+  "scripts": {
+    "test": "npx nodeunit test/*.test.js",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "src/httpclient.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "nodeunit": "^0.11.3"
   }
 }

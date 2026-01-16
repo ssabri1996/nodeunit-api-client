@@ -1,57 +1,42 @@
-nodeunit-httpclient
-===================
+# nodeunit-httpclient
 
-HTTP response testing for NodeUnit
+[![npm version](https://img.shields.io/npm/v/nodeunit-httpclient.svg)](https://www.npmjs.com/package/nodeunit-httpclient)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Usage
------
+Lightweight HTTP/HTTPS client with built-in testing assertions for Nodeunit.
 
-    //Setup client with automatic tests on each response
-    var api = require('nodeunit-httpclient').create({
-        port: 3000,
-        path: '/api',   //Base URL for requests
-        status: 200,    //Test each response is OK (can override later)
-        headers: {      //Test that each response must have these headers (can override later)
-            'content-type': 'application/json'  )
-        }
-    });
-    
-    //Automatic tests on response object
-    exports.test1 = function(test) {
-        api.get(test, '/user/nonexistent', {
-            status: 404,
-            headers: { 'content-type': 'text/plain' },
-            body: 'Not found'
-        })
-    };
+## ✨ Features
 
-    //Test a response
-    exports.test2 = function(test) {
-        api.get(test, '/user', function(res) {
-            //JSON responses are automatically parsed:
-            test.equal(res.json, [{ name: 'Eric' }, { 'name': 'Kyle' }]);
+- ✅ Simple API for HTTP/HTTPS requests
+- ✅ Built-in assertions for Nodeunit tests
+- ✅ Support for GET, POST, PUT, DELETE, HEAD, OPTIONS, TRACE, CONNECT
+- ✅ Automatic JSON parsing
+- ✅ Configurable timeouts
+- ✅ Basic authentication support
+- ✅ Query string handling
+- ✅ No external dependencies (uses native Node.js modules)
 
-            test.done();
-        });
-    };
-    
-    //POST with data and custom header
-    exports.test3 = function(test) {
-        api.post(test, '/user', {
-            headers: { foo: 'bar' },
-            data: { name: 'Charlie' } //Objects are serialised as JSON automatically
-        }, {
-            status: 200
-        }, function(res) {
-            test.equal(1, 1);
-            
-            test.done();
-        });
-    };
-    
+## 📦 Installation
 
-Changelog
----------
+```bash
+npm install nodeunit-httpclient
+```
+## 🚀 Quick Start
 
-0.2.0
-- Handle 204 No Content responses
+```js
+const HttpClient = require('nodeunit-httpclient');
+
+const api = new HttpClient({
+  protocol: 'https',
+  host: 'api.example.com',
+  port: 443,
+  path: '/v1'
+});
+
+// Simple GET request
+api.get(null, '/users', function(response) {
+  console.log(response.statusCode); // 200
+  console.log(response.data);       // Parsed JSON
+});
+
+```
