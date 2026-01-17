@@ -1,207 +1,275 @@
 'use strict';
-var querystring = require('querystring'),
-    underscore = require('underscore'),
-    debug;
 
+var http = require('http'),
+    https = require('https'),
+    querystring = require('querystring'),
+    underscore = require('underscore');
 
 /**
  * @param {object}  Options:
+ *                      https (false)   - Set to true for HTTPS calls
  *                      auth ('username:password')
  *                      host ('localhost')
- *                      port (80)
+ *                      port (80 for http, 443 for https)
  *                      path ('')       - Base path URL e.g. '/api'
- *                      headers ({})    - Test that these headers are present on every response (unless overridden)
- *                      status (null)   - Test that every response has this status (unless overridden)
- *						https (false) 	- https/http
+ *                      headers ({})    - Default headers for all requests
+ *                      status (null)   - Expected status code for all responses
+ *                      timeout (0)     - Request timeout in milliseconds (0 = no timeout)
  * @param options
  */
 var HttpClient = module.exports = function(options) {
     options = options || {};
 
+    this.https = options.https || false;
     this.auth = options.auth || undefined;
     this.host = options.host || 'localhost';
-    this.port = options.port || 80;
+    this.port = options.port || (this.https ? 443 : 80);
     this.path = options.path || '';
     this.headers = options.headers || {};
     this.status = options.status;
-    this.http = require(options.https ? 'https' : 'http');
-    debug = options.debug ? true : false;
+    this.timeout = options.timeout || 0;
 };
 
 HttpClient.create = function(options) {
     return new HttpClient(options);
 };
 
-var methods = ['get', 'post', 'head', 'put', 'del', 'trace', 'options', 'connect'];
+var methods = ['get', 'post', 'head', 'put', 'del', 'trace', 'options', 'connect', 'patch'];
 
 /**
- * Performs a testable http request
+ * Performs HTTP/HTTPS request
  *
- * @param {Assert}
- *   Nodeunit assert object
- * @param {string} [route=undefined]
- *   http uri to test
- * @param {object} [req=undefined]
- *   Object containing request related attributes like headers or body.
- * @param {object} [res=undefined]
- *   Object to compare with the response of the http call
- * @param {Function} [cb=undefined]
- *   Callback that will be called after the http call. Receives the http response object.
+ * @param {object|null} assert - Assert object for testing (can be null)
+ * @param {string} path - Request path
+ * @param {object} req - Request options (headers, data, auth, etc.)
+ * @param {object} res - Expected response options (status, headers, body, etc.)
+ * @param {Function} cb - Callback function
  */
 methods.forEach(function(method) {
     HttpClient.prototype[method] = function(assert, path, req, res, cb) {
         var self = this;
 
-        //Handle different signatures
-        if (arguments.length == 3) {
-            //(assert, path, cb)
+        // Initialize default values
+        req = req || {};
+        res = res || {};
+
+        // Handle different signatures
+        if (arguments.length === 2) {
+            // (assert, path) or (null, path)
+            cb = null;
+        } else if (arguments.length === 3) {
             if (typeof req === 'function') {
+                // (assert, path, cb)
                 cb = req;
                 req = {};
                 res = {};
-            }
-
-            //(assert, path, res)
-            else {
+            } else {
+                // (assert, path, res)
                 cb = null;
                 res = req;
                 req = {};
             }
-        }
-
-        //(assert, path, req, cb)
-        if (arguments.length == 4) {
-            if (typeof res == 'function') {
+        } else if (arguments.length === 4) {
+            if (typeof res === 'function') {
+                // (assert, path, req, cb)
                 cb = res;
                 res = {};
             }
+            // else: (assert, path, req, res)
+        }
+        // arguments.length === 5: (assert, path, req, res, cb)
+
+        // Generate full path
+        var fullPath = this.path + (path || '');
+
+        // Add query parameters for GET-like methods
+        if (['post', 'put', 'patch'].indexOf(method) === -1) {
+            var queryData = req.query || req.data;
+            if (queryData && typeof queryData === 'object') {
+                var queryStr = querystring.stringify(queryData);
+                if (queryStr) {
+                    fullPath += (fullPath.indexOf('?') === -1 ? '?' : '&') + queryStr;
+                }
+            }
         }
 
-        //Also accepted:
-        //(assert, path, req, res)
-        //(assert, path, req, res, cb)
+        // Prepare request headers
+        var requestHeaders = underscore.extend({}, this.headers, req.headers || {});
 
-        //Generate path based on base path, route path and querystring params
-        var fullPath = this.path + path;
-
-        //Don't add to querystring if POST or PUT
-        if (['post', 'put'].indexOf(method) === -1) {
-            var data = req.data;
-
-            if (data) {fullPath += '?' + querystring.stringify(data);}
-        }
+        // Clean undefined headers
+        Object.keys(requestHeaders).forEach(function(key) {
+            if (requestHeaders[key] === undefined || requestHeaders[key] === null) {
+                delete requestHeaders[key];
+            }
+        });
 
         var options = {
             host: this.host,
             port: this.port,
             path: fullPath,
-            method: method == 'del' ? 'DELETE' : method.toUpperCase(),
-            headers: underscore.extend({}, this.headers, req.headers)
+            method: method === 'del' ? 'DELETE' : method.toUpperCase(),
+            headers: requestHeaders,
+            rejectUnauthorized: false // Disable SSL verification
         };
 
+        // Set authentication
         if (req.auth) {
             options.auth = req.auth;
         } else if (this.auth) {
             options.auth = this.auth;
         }
 
-        var request = this.http.request(options);
+        // Set timeout
+        if (req.timeout || this.timeout) {
+            options.timeout = req.timeout || this.timeout;
+        }
 
-        //Write POST & PUTdata
-        if (['post', 'put'].indexOf(method) != -1) {
-            var data = req.data || req.body;
+        // Choose HTTP or HTTPS module
+        var requestModule = this.https ? https : http;
+        var request = requestModule.request(options);
 
-            if (data) {
-                if (typeof data == 'object') {
-                    request.setHeader('content-type', 'application/json');
-                    request.write(JSON.stringify(data));
-                } else {
-                    request.write(data);
+        // Set request timeout
+        if (options.timeout) {
+            request.setTimeout(options.timeout, function() {
+                request.abort();
+                var error = new Error('Request timeout after ' + options.timeout + 'ms');
+                error.code = 'TIMEOUT';
+                if (cb) {
+                    return cb(null, error);
+                }
+            });
+        }
+
+        // Handle request body for POST/PUT/PATCH
+        if (['post', 'put', 'patch'].indexOf(method) !== -1) {
+            var bodyData = req.body || req.data;
+
+            if (bodyData) {
+                if (typeof bodyData === 'object') {
+                    // JSON data
+                    var jsonData = JSON.stringify(bodyData);
+                    request.setHeader('Content-Type', 'application/json');
+                    request.setHeader('Content-Length', Buffer.byteLength(jsonData));
+                    request.write(jsonData);
+                } else if (typeof bodyData === 'string') {
+                    // String data
+                    request.setHeader('Content-Length', Buffer.byteLength(bodyData));
+                    request.write(bodyData);
+                } else if (Buffer.isBuffer(bodyData)) {
+                    // Buffer data
+                    request.setHeader('Content-Length', bodyData.length);
+                    request.write(bodyData);
                 }
             }
         }
 
-        if (debug) {httpClientLogger.log('REQUEST', request);}
-        //Send
+        // Handle form data
+        if (req.form && typeof req.form === 'object') {
+            var formData = querystring.stringify(req.form);
+            request.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+            request.setHeader('Content-Length', Buffer.byteLength(formData));
+            request.write(formData);
+        }
+
+        // Send request
         request.end();
 
+        // Handle response
         request.on('response', function(response) {
-            if (debug) {httpClientLogger.log('RESPONSE', response);}
-
             response.setEncoding('utf8');
+            response.body = '';
 
             response.on('data', function(chunk) {
-                if (response.body) {response.body += chunk;} else {response.body = chunk;}
+                response.body += chunk;
             });
 
-            //Handle the response; run response tests and hand back control to test
             response.on('end', function() {
-                //Add parsed JSON
-                var contentType = response.headers['content-type'];
-                if (contentType && contentType.indexOf('application/json') != -1) {
-                    if (typeof response.body != 'undefined') {
-                        //Catch errors on JSON.parse and attempt to handle cases where the response.body contains html
-                        try {
-                            response.data = JSON.parse(response.body);
-                        } catch (err) {
-                            console.log('JSON.parse response.body error:');
-                            console.log(err);
-                            if (debug) {httpClientLogger.log('RESPONSE.BODY', response.body);}
-                            var responseTest = response.body.split('{');
-                            if (responseTest.length > 1) {
-                                var actualResponse = '{' + responseTest[1];
-                                try {
-                                    response.data = JSON.parse(actualResponse);
-                                    console.log('JSON.parse second attempt success.');
-                                } catch (err) {
-                                    console.log('JSON.parse error on second parse attempt.');
-                                    console.log(err);
-                                    if (debug) {httpClientLogger.log('FILTERED RESPONSE.BODY', actualResponse);}
-                                }
-                            }
-                        }
+                // Parse JSON if content-type indicates JSON
+                var contentType = response.headers['content-type'] || '';
+                if (contentType.indexOf('application/json') !== -1) {
+                    try {
+                        response.data = JSON.parse(response.body);
+                    } catch (e) {
+                        response.data = null;
+                        response.parseError = e;
                     }
                 }
 
-                //Run tests on the response
-                (function testResponse() {
-                    //Can pass in falsy value to prevent running tests
-                    if (!assert) {return;}
+                // Add convenience properties
+                response.ok = response.statusCode >= 200 && response.statusCode < 300;
+                response.clientError = response.statusCode >= 400 && response.statusCode < 500;
+                response.serverError = response.statusCode >= 500;
 
-                    //Status code
-                    var status = res.status || self.status;
-                    if (status) {
-                        assert.equal(response.statusCode, status);
+                // Run response tests if assert is provided
+                if (assert) {
+                    try {
+                        // Test status code
+                        var expectedStatus = res.status || self.status;
+                        if (expectedStatus) {
+                            assert.equal(response.statusCode, expectedStatus,
+                                'Expected status ' + expectedStatus + ' but got ' + response.statusCode);
+                        }
+
+                        // Test headers
+                        var expectedHeaders = underscore.extend({}, self.headers, res.headers || {});
+                        Object.keys(expectedHeaders).forEach(function(key) {
+                            var expected = expectedHeaders[key];
+                            var actual = response.headers[key.toLowerCase()];
+                            if (expected !== undefined) {
+                                assert.equal(actual, expected,
+                                    'Expected header "' + key + '" to be "' + expected + '" but got "' + actual + '"');
+                            }
+                        });
+
+                        // Test response body
+                        if (res.body !== undefined) {
+                            assert.equal(response.body, res.body, 'Response body mismatch');
+                        }
+
+                        // Test JSON data
+                        if (res.data !== undefined) {
+                            assert.deepEqual(response.data, res.data, 'Response data mismatch');
+                        }
+
+                        // Test response properties
+                        if (res.ok !== undefined) {
+                            assert.equal(response.ok, res.ok, 'Response ok status mismatch');
+                        }
+
+                    } catch (assertError) {
+                        if (cb) {
+                            return cb(response, assertError);
+                        } else if (assert.done) {
+                            return assert.done(assertError);
+                        }
+                        throw assertError;
                     }
+                }
 
-                    //Headers
-                    var headers = underscore.extend({}, self.headers, res.headers);
-                    for (var key in headers) {
-                        assert.equal(response.headers[key], headers[key]);
-                    }
-
-                    //Body
-                    if (res.body) {
-                        assert.equal(response.body, res.body);
-                    }
-
-                    //JSON data
-                    if (res.data) {
-                        assert.deepEqual(response.data, res.data);
-                    }
-                })();
-
-
-                //Done, return control to test
-                if (cb) {return cb(response);} else {return assert.done();}
+                // Call callback or assert.done()
+                if (cb) {
+                    return cb(response);
+                } else if (assert && assert.done) {
+                    return assert.done();
+                }
             });
+        });
+
+        // Handle request errors
+        request.on('error', function(error) {
+            error.request = {
+                method: options.method,
+                url: (self.https ? 'https' : 'http') + '://' + self.host + ':' + self.port + fullPath,
+                headers: options.headers
+            };
+
+            if (cb) {
+                return cb(null, error);
+            } else if (assert && assert.done) {
+                return assert.done(error);
+            }
+
+            throw error;
         });
     };
 });
-
-var httpClientLogger = {
-    log: function(header, data) {
-        console.log(header);
-        console.log(data);
-    }
-};
